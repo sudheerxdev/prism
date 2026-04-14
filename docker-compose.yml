@@ -1,0 +1,32 @@
+version: '3.9'
+
+services:
+  prism:
+    build: .
+    ports:
+      - "3002:3002"      # Streamlit UI
+      - "8000:8000"      # FastAPI (optional)
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DISCORD_TOKEN=${DISCORD_TOKEN:-}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
+    volumes:
+      - ./specflow.db:/app/specflow.db  # Persist database
+      - ./data:/app/data                # Context files
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:3002')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Usage:
+# docker-compose up
+#
+# With environment variables:
+# OPENAI_API_KEY=sk-... docker-compose up
+#
+# To run tests:
+# docker-compose exec prism python -m pytest tests/ -v

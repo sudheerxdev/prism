@@ -1,0 +1,15 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache
+.venv
+venv
+*.db
+.DS_Store
+*.log
+node_modules
+.vscode
+.idea
