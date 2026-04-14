@@ -16,8 +16,17 @@ from queue_store import (
 from agent import (
     build_interpreter_graph, build_architect_graph, auto_process, check_relevance,
 )
-import discord_bot
-import slack_bot
+
+# Optional bot imports (may fail if environment not configured)
+try:
+    import discord_bot
+except Exception:
+    discord_bot = None
+
+try:
+    import slack_bot
+except Exception:
+    slack_bot = None
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
