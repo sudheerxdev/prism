@@ -1,22 +1,19 @@
 """
 PRISM — AI-Powered Feedback Intelligence Platform
-Streamlit Cloud Ultra-Minimal Version
+Streamlit Cloud - True Lazy Initialization (NO module-level DB calls)
 """
 
 import streamlit as st
 
-# ── Page config (MUST BE FIRST) ────────────────────────────────────────────────
-st.set_page_config(
-    page_title="PRISM",
-    page_icon="◆",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 1: ABSOLUTE BARE MINIMUM (page config + CSS only)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# ── MINIMAL CSS ─────────────────────────────────────────────────────────────────
+st.set_page_config(page_title="PRISM", page_icon="◆", layout="wide")
+
 st.markdown("""
 <style>
-.main { background: #0D0D0D !important; }
+.main { background: #0D0D0D !important; color: #FFF; }
 button { background: #5B63ED !important; color: white !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -24,47 +21,52 @@ button { background: #5B63ED !important; color: white !important; }
 st.markdown("# 🔷 PRISM")
 st.markdown("**AI-Powered Feedback Intelligence**")
 
-# ── LAZY initialization - only on demand ────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 2: LAZY DB function (DEFINED but NEVER called at module level)
+# ═══════════════════════════════════════════════════════════════════════════════
+
 @st.cache_resource
-def get_db():
-    """Initialize database lazily"""
+def _get_db():
+    """Initialize database lazily - ONLY called when explicitly needed"""
     try:
         from queue_store import (
-            init_db, add_message, get_messages, set_status, board_counts,
-            get_cfg, set_cfg,
+            init_db, add_message, get_messages, board_counts, get_cfg, set_cfg
         )
         init_db()
         return {
-            "add_message": add_message, "get_messages": get_messages,
-            "set_status": set_status, "board_counts": board_counts,
-            "get_cfg": get_cfg, "set_cfg": set_cfg,
+            "add": add_message,
+            "get": get_messages,
+            "counts": board_counts,
+            "get_cfg": get_cfg,
+            "set_cfg": set_cfg,
         }
     except Exception as e:
         return None
 
-# ── Session state ──────────────────────────────────────────────────────────────
-if "initialized" not in st.session_state:
-    st.session_state.initialized = True
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 3: Navigation (safe - no function calls, just UI)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## Navigation")
-    page = st.radio("", ["📊 Signals", "⚙️ Settings"], label_visibility="collapsed")
+    st.markdown("**Navigation**")
+    page = st.radio("", ["📊 Board", "⚙️ Settings"], label_visibility="collapsed")
 
-# ── Main content ──────────────────────────────────────────────────────────────────
-# Get DB only when rendering
-db = get_db()
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 4: Page rendering (DB initialization happens HERE, inside conditionals)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-if not db:
-    st.error("❌ Database initialization failed")
-    st.info("Troubleshooting: Check your database permissions and try again")
-    st.stop()
-
-if page == "📊 Signals":
+if page == "📊 Board":
     st.markdown("## 📊 Signals Board")
     
-    # Show stats
-    counts = db["board_counts"]()
+    # NOW initialize DB (only when rendering this page)
+    db = _get_db()
+    
+    if not db:
+        st.error("❌ Unable to initialize database")
+        st.stop()
+    
+    # Show statistics
+    counts = db["counts"]()
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("🐛 Issues", counts.get("issue_items", 0))
@@ -77,16 +79,21 @@ if page == "📊 Signals":
     
     st.divider()
     
-    # Add feedback
+    # Add feedback form
     st.markdown("### ➕ Add Feedback")
     col1, col2 = st.columns([4, 1])
     with col1:
-        text = st.text_area("Feedback:", placeholder="Enter your feedback...", label_visibility="collapsed")
+        text = st.text_area(
+            "Your feedback:",
+            placeholder="Type or paste feedback...",
+            label_visibility="collapsed",
+            key="feedback_input"
+        )
     with col2:
         if st.button("Add", use_container_width=True, type="primary"):
-            if text:
+            if text.strip():
                 try:
-                    db["add_message"]("manual", text.strip(), channel="manual", author="You")
+                    db["add"]("manual", text.strip(), channel="manual", author="User")
                     st.success("✅ Added!")
                     st.rerun()
                 except Exception as e:
@@ -94,40 +101,44 @@ if page == "📊 Signals":
     
     st.divider()
     
-    # Show messages
-    st.markdown("### 📋 Recent Messages")
-    messages = db["get_messages"](limit=10)
+    # Show recent messages
+    st.markdown("### 📋 Recent Feedback")
+    messages = db["get"](limit=10)
     if messages:
         for msg in messages:
-            with st.container(border=True):
-                st.write(f"**{msg.get('channel', 'unknown')}**: {msg.get('content', '')[:80]}")
+            st.info(f"**{msg.get('channel', 'manual')}**: {msg.get('content', '')[:80]}")
     else:
-        st.info("No messages yet")
+        st.info("No feedback yet. Add some above! ⬆️")
 
 elif page == "⚙️ Settings":
     st.markdown("## ⚙️ Settings")
     
+    # Initialize DB for settings page
+    db = _get_db()
+    
+    if not db:
+        st.error("❌ Unable to initialize database")
+        st.stop()
+    
     col1, col2 = st.columns(2)
+    
     with col1:
         st.markdown("### 🔐 API Configuration")
         api_key = db["get_cfg"]("ai_api_key", "")
-        if not api_key:
-            st.warning("⚠️ OpenAI API key not configured")
+        if api_key:
+            st.success("✅ API Key configured")
         else:
-            st.success("✅ API key configured")
+            st.warning("⚠️ No API key configured")
     
     with col2:
-        st.markdown("### 📊 Statistics")
-        counts = db["board_counts"]()
-        st.json(counts)
-    
-    st.divider()
-    st.markdown("### ℹ️ About PRISM")
-    st.markdown("""
-    **PRISM** transforms feedback chaos into clarity using AI agents.
-    
-    Built with: Streamlit, LangGraph, OpenAI GPT-4o
-    """)
+        st.markdown("### 📊 Board Statistics")
+        counts = db["counts"]()
+        st.json({
+            "Total Items": counts.get("total_items", 0),
+            "Pending": counts.get("pending_items", 0),
+            "Issues": counts.get("issue_items", 0),
+            "Features": counts.get("feature_items", 0),
+        })
 
 st.divider()
-st.caption("PRISM • AI-Powered Feedback Intelligence")
+st.caption("PRISM • AI-Powered Feedback Intelligence • v1.0")
