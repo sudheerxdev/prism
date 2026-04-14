@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Initialize database ───────────────────────────────────────────────────────
+# ── Initialize database (gracefully handle errors) ───────────────────────────
 try:
     from queue_store import (
         init_db, add_message, get_messages, set_status, board_counts,
@@ -22,20 +22,31 @@ try:
         get_cfg, set_cfg, LANE_META, LANE_STATUSES,
     )
     init_db()
+    db_ready = True
 except Exception as e:
-    st.error(f"❌ Failed to initialize database: {e}")
-    st.stop()
+    db_ready = False
+    discord_bot = None
+    slack_bot = None
+    # Create stub functions so app doesn't crash
+    def board_counts():
+        return {"total_items": 0, "pending_items": 0, "issue_items": 0, "feature_items": 0, "idea_items": 0, "marketing_items": 0, "unclassified_items": 0}
+    def get_cfg(key, default=""):
+        return default
+    def set_cfg(key, value):
+        pass
+    def get_messages(limit=10):
+        return []
 
-# ── Import agent ─────────────────────────────────────────────────────────────
+# ── Import agent (gracefully handle errors) ─────────────────────────────────────
 try:
     from agent import (
         build_interpreter_graph, build_architect_graph, auto_process, check_relevance,
     )
+    agent_ready = True
 except Exception as e:
-    st.error(f"❌ Failed to load agent: {e}")
-    st.stop()
+    agent_ready = False
 
-# ── Optional bot imports ──────────────────────────────────────────────────────
+# ── Optional bot imports (non-critical) ──────────────────────────────────────
 try:
     import discord_bot
 except Exception:
@@ -120,6 +131,13 @@ with st.sidebar:
         st.metric("Total", counts.get("total_items", 0))
     with col2:
         st.metric("Pending", counts.get("pending_items", 0))
+
+# ── Status check ──────────────────────────────────────────────────────────────
+st.markdown("---")
+if not db_ready:
+    st.warning("⚠️ Database not initialized. Features limited. Running in demo mode.")
+if not agent_ready:
+    st.warning("⚠️ AI Agent not loaded. Auto-classification disabled.")
 
 # ── Main content ──────────────────────────────────────────────────────────────
 if page == "📊 Signals":
