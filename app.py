@@ -17,7 +17,7 @@ from agent import (
     build_interpreter_graph, build_architect_graph, auto_process, check_relevance,
 )
 
-# Optional bot imports (may fail if environment not configured)
+# Optional bot imports - may fail in restricted environments
 try:
     import discord_bot
 except Exception:
